@@ -21,6 +21,8 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.Resources;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
@@ -36,6 +38,8 @@ import android.view.SurfaceHolder;
 import android.view.WindowInsets;
 
 import java.lang.ref.WeakReference;
+import java.text.SimpleDateFormat;
+import java.util.Date;
 import java.util.TimeZone;
 import java.util.concurrent.TimeUnit;
 
@@ -88,6 +92,12 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
         boolean mRegisteredTimeZoneReceiver = false;
         Paint mBackgroundPaint;
         Paint mTextPaint;
+        Paint mDateTextPaint;
+        Paint mTempHighTextPaint;
+        Paint mTempLowTextPaint;
+        Typeface mDateTypeface;
+        Typeface mTempHighTypeface;
+        Typeface mTempLowTypeface;
         boolean mAmbient;
         Time mTime;
         final BroadcastReceiver mTimeZoneReceiver = new BroadcastReceiver() {
@@ -123,6 +133,25 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
 
             mTextPaint = new Paint();
             mTextPaint = createTextPaint(resources.getColor(R.color.digital_text));
+
+            mDateTextPaint = new Paint();
+            mTempHighTextPaint = new Paint();
+            mTempLowTextPaint = new Paint();
+            mTextPaint = createTextPaint(resources.getColor(R.color.digital_text));
+            mDateTextPaint = createTextPaint(resources.getColor(R.color.digital_text));
+            mTempHighTextPaint = createTextPaint(resources.getColor(R.color.digital_text));
+            mTempLowTextPaint = createTextPaint(resources.getColor(R.color.digital_text));
+
+            mDateTypeface = Typeface.createFromAsset(getAssets(), "fonts/Roboto-Thin.ttf");
+            mTempHighTypeface = Typeface.create(Typeface.DEFAULT, Typeface.NORMAL);
+            mTempLowTypeface = Typeface.createFromAsset(getAssets(), "fonts/Roboto-Thin.ttf");
+
+            mDateTextPaint.setTextSize(resources.getDimensionPixelSize(R.dimen.date_text_size));
+            mTempHighTextPaint.setTextSize(resources.getDimensionPixelSize(R.dimen.temperature_text_size));
+            mTempLowTextPaint.setTextSize(resources.getDimensionPixelSize(R.dimen.temperature_text_size));
+            mDateTextPaint.setTypeface(mDateTypeface);
+            mTempHighTextPaint.setTypeface(mTempHighTypeface);
+            mTempLowTextPaint.setTypeface(mTempLowTypeface);
 
             mTime = new Time();
         }
@@ -229,12 +258,25 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
                 canvas.drawRect(0, 0, bounds.width(), bounds.height(), mBackgroundPaint);
             }
 
-            // Draw H:MM in ambient mode or H:MM:SS in interactive mode.
             mTime.setToNow();
-            String text = mAmbient
-                    ? String.format("%d:%02d", mTime.hour, mTime.minute)
-                    : String.format("%d:%02d:%02d", mTime.hour, mTime.minute, mTime.second);
-            canvas.drawText(text, mXOffset, mYOffset, mTextPaint);
+            String time = String.format("%d:%02d", mTime.hour, mTime.minute);
+            canvas.drawText(time, bounds.centerX() - (mTextPaint.measureText(time))/2, mYOffset, mTextPaint);
+
+            SimpleDateFormat sdf = new SimpleDateFormat("E, MMM dd yyyy");
+            String dateString = sdf.format(new Date());
+
+            canvas.drawText(dateString, bounds.centerX() - (mDateTextPaint.measureText(dateString))/2, mYOffset + 35, mDateTextPaint);
+
+            String tempHigh = "25°";
+            String tempLow = "16°";
+
+            Bitmap bitmap = BitmapFactory.decodeResource(getResources(), R.mipmap.ic_launcher);
+            Bitmap weatherIcon = Bitmap.createScaledBitmap(bitmap, bitmap.getWidth() / 2, bitmap.getHeight() / 2, true );
+            bitmap.recycle();
+            canvas.drawBitmap(weatherIcon, bounds.centerX() + 15 - (mTempLowTextPaint.measureText(tempLow)) - (mTempLowTextPaint.measureText(tempHigh)), mYOffset + 75, mDateTextPaint);
+            canvas.drawText(tempHigh, bounds.centerX() - (mTempHighTextPaint.measureText(tempHigh))/2, mYOffset + 110, mTempHighTextPaint);
+            canvas.drawText(tempLow, bounds.centerX() + (mTempLowTextPaint.measureText(tempHigh))/2 + (mTempLowTextPaint.measureText(tempLow))/2, mYOffset + 110, mTempLowTextPaint);
+
         }
 
         /**
