@@ -31,11 +31,23 @@ import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
 import android.support.wearable.watchface.CanvasWatchFaceService;
 import android.support.wearable.watchface.WatchFaceStyle;
 import android.text.format.Time;
 import android.view.SurfaceHolder;
 import android.view.WindowInsets;
+
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.wearable.DataApi;
+import com.google.android.gms.wearable.DataEvent;
+import com.google.android.gms.wearable.DataEventBuffer;
+import com.google.android.gms.wearable.DataItem;
+import com.google.android.gms.wearable.DataMap;
+import com.google.android.gms.wearable.DataMapItem;
+import com.google.android.gms.wearable.Wearable;
 
 import java.lang.ref.WeakReference;
 import java.text.SimpleDateFormat;
@@ -87,7 +99,8 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
         }
     }
 
-    private class Engine extends CanvasWatchFaceService.Engine {
+
+    private class Engine extends CanvasWatchFaceService.Engine implements GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener, DataApi.DataListener {
         final Handler mUpdateTimeHandler = new EngineHandler(this);
         boolean mRegisteredTimeZoneReceiver = false;
         Paint mBackgroundPaint;
@@ -115,6 +128,15 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
          * disable anti-aliasing in ambient mode.
          */
         boolean mLowBitAmbient;
+
+        private static final String TEMPERATURE_HIGH_KEY = "com.example.android.sunshine.app.key.temperature_high";
+        private static final String TEMPERATURE_LOW_KEY = "com.example.android.sunshine.app.key.temperature_low";
+        private static final String WEATHER_ID_KEY = "com.example.android.sunshine.app.key.weather_id";
+        private GoogleApiClient mGoogleApiClient;
+
+        private String temperatureHigh = "0";
+        private String temperatureLow = "0";
+        private int weatherIconId = R.drawable.ic_clear;
 
         @Override
         public void onCreate(SurfaceHolder holder) {
@@ -154,6 +176,13 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
             mTempLowTextPaint.setTypeface(mTempLowTypeface);
 
             mTime = new Time();
+
+            mGoogleApiClient = new GoogleApiClient.Builder(SunshineWatchFace.this)
+                    .addApi(Wearable.API)
+                    .addConnectionCallbacks(this)
+                    .addOnConnectionFailedListener(this)
+                    .build();
+            mGoogleApiClient.connect();
         }
 
         @Override
@@ -267,15 +296,10 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
 
             canvas.drawText(dateString, bounds.centerX() - (mDateTextPaint.measureText(dateString))/2, mYOffset + 35, mDateTextPaint);
 
-            String tempHigh = "25°";
-            String tempLow = "16°";
-
-            Bitmap bitmap = BitmapFactory.decodeResource(getResources(), R.mipmap.ic_launcher);
-            Bitmap weatherIcon = Bitmap.createScaledBitmap(bitmap, bitmap.getWidth() / 2, bitmap.getHeight() / 2, true );
-            bitmap.recycle();
-            canvas.drawBitmap(weatherIcon, bounds.centerX() + 15 - (mTempLowTextPaint.measureText(tempLow)) - (mTempLowTextPaint.measureText(tempHigh)), mYOffset + 75, mDateTextPaint);
-            canvas.drawText(tempHigh, bounds.centerX() - (mTempHighTextPaint.measureText(tempHigh))/2, mYOffset + 110, mTempHighTextPaint);
-            canvas.drawText(tempLow, bounds.centerX() + (mTempLowTextPaint.measureText(tempHigh))/2 + (mTempLowTextPaint.measureText(tempLow))/2, mYOffset + 110, mTempLowTextPaint);
+            Bitmap bitmap = BitmapFactory.decodeResource(getResources(), weatherIconId);
+            canvas.drawBitmap(bitmap, bounds.centerX() - 25 - (mTempLowTextPaint.measureText(temperatureLow)) - (mTempLowTextPaint.measureText(temperatureHigh)), mYOffset + 75, mDateTextPaint);
+            canvas.drawText(temperatureHigh, bounds.centerX() - (mTempHighTextPaint.measureText(temperatureHigh))/2, mYOffset + 110, mTempHighTextPaint);
+            canvas.drawText(temperatureLow, bounds.centerX() + (mTempLowTextPaint.measureText(temperatureHigh))/2 + (mTempLowTextPaint.measureText(temperatureLow))/2, mYOffset + 110, mTempLowTextPaint);
 
         }
 
@@ -310,5 +334,44 @@ public class SunshineWatchFace extends CanvasWatchFaceService {
                 mUpdateTimeHandler.sendEmptyMessageDelayed(MSG_UPDATE_TIME, delayMs);
             }
         }
+
+        @Override
+        public void onConnected(@Nullable Bundle bundle) {
+            Wearable.DataApi.addListener(mGoogleApiClient, this);
+        }
+
+        @Override
+        public void onConnectionSuspended(int i) {
+
+        }
+
+        @Override
+        public void onConnectionFailed(@NonNull ConnectionResult connectionResult) {
+
+        }
+
+        @Override
+        public void onDataChanged(DataEventBuffer dataEventBuffer) {
+            for (DataEvent event : dataEventBuffer) {
+                if (event.getType() == DataEvent.TYPE_CHANGED) {
+                    // DataItem changed
+                    DataItem item = event.getDataItem();
+                    if (item.getUri().getPath().compareTo("/weather") == 0) {
+                        DataMap dataMap = DataMapItem.fromDataItem(item).getDataMap();
+                        updateWatchFaceWeather(dataMap.getString(TEMPERATURE_HIGH_KEY), dataMap.getString(TEMPERATURE_LOW_KEY),
+                                dataMap.getInt(WEATHER_ID_KEY));
+                    }
+                } else if (event.getType() == DataEvent.TYPE_DELETED) {
+                    // DataItem deleted
+                }
+            }
+        }
+
+        private void updateWatchFaceWeather(String tempHigh, String tempLow, int weatherId) {
+            temperatureHigh = tempHigh;
+            temperatureLow = tempLow;
+            weatherIconId = Utility.getIconResourceForWeatherCondition(weatherId);
+        }
     }
+
 }
